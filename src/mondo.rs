@@ -39,6 +39,18 @@ impl ResultMonad {
     }
 }
 
+pub struct IterMonad;
+
+impl IterMonad {
+    pub fn mpure<T>(value: T) -> std::option::Item<T> {
+        Some(value).move_iter()
+    }
+    pub fn mbind<T,U,I:Iterator<T>,J:Iterator<U>>(value: I, func: |T| -> J)
+                                                  -> std::vec::MoveItems<U> {
+        value.flat_map(func).collect::<Vec<U>>().move_iter()
+    }
+}
+
 #[cfg(test)]
 mod test {
     use super::*;
@@ -81,5 +93,16 @@ mod test {
         } in (a+b,x*y));
         
         assert_eq!(result, Err(()));
+    }
+
+    #[test]
+    fn iter() {
+        let mut result = monad!(IterMonad {
+            let a <- vec![1u,2,3].move_iter();
+            let b <- vec!["hello"].move_iter();
+        } in (a,b));
+
+        assert_eq!(result.collect::<Vec<(uint,&'static str)>>(),
+                   vec![(1u,"hello"),(2,"hello"),(3,"hello")]);
     }
 }
