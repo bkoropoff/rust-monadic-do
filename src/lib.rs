@@ -43,11 +43,11 @@ pub struct IterMonad;
 
 impl IterMonad {
     pub fn mpure<T>(value: T) -> std::option::Item<T> {
-        Some(value).move_iter()
+        Some(value).into_iter()
     }
     pub fn mbind<T,U,I:Iterator<T>,J:Iterator<U>>(value: I, func: |T| -> J)
                                                   -> std::vec::MoveItems<U> {
-        value.flat_map(func).collect::<Vec<U>>().move_iter()
+        value.flat_map(func).collect::<Vec<U>>().into_iter()
     }
 }
 
