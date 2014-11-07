@@ -98,8 +98,8 @@ mod test {
     #[test]
     fn iter() {
         let mut result = monad!(IterMonad {
-            let a <- vec![1u,2,3].move_iter();
-            let b <- vec!["hello"].move_iter();
+            let a <- vec![1u,2,3].into_iter();
+            let b <- vec!["hello"].into_iter();
         } in (a,b));
 
         assert_eq!(result.collect::<Vec<(uint,&'static str)>>(),
