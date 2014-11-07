@@ -20,6 +20,17 @@ macro_rules! monad(
         let $p = $e;
         monad!($m { $($rest)* } in $y)
     });
+    ($m:ident {
+        $e:expr;
+        $($rest:tt)*
+    } in $y:expr) => (
+        monad!($m { let _ <- $e; $($rest)* } in $y)
+    );
+    ($m:ident {
+        $e:expr
+    } in $y:expr) => (
+        monad!($m { let _ <- $e; } in $y)
+    );
     ($m:ident { } in $y:expr) => ($m::mpure($y));
 )
 
@@ -123,5 +134,15 @@ mod test {
             let y <- b;
         } in x*y);
         assert_eq!(result, Some(20));
+    }
+
+    #[test]
+    fn sequence() {
+        let result = monad!(OptionMonad {
+            Some(());
+            let x <- Some(());
+            None::<()>
+        } in x);
+        assert_eq!(result, None);
     }
 }
