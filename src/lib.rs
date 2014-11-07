@@ -5,13 +5,21 @@
 macro_rules! monad(
     ($m:ident { 
         let $p:pat <- $e:expr;
-        $(let $p_rest:pat <- $e_rest:expr;)*
+        $($rest:tt)*
     } in $y:expr) => (
         $m::mbind($e,|$p| {
             monad!($m {
-                $(let $p_rest <- $e_rest;)*
+                $($rest)*
             } in $y)
-        }));
+        })
+    );
+    ($m:ident {
+        let $p:pat = $e:expr;
+        $($rest:tt)*
+    } in $y:expr) => ({
+        let $p = $e;
+        monad!($m { $($rest)* } in $y)
+    });
     ($m:ident { } in $y:expr) => ($m::mpure($y));
 )
 
@@ -104,5 +112,16 @@ mod test {
 
         assert_eq!(result.collect::<Vec<(uint,&'static str)>>(),
                    vec![(1u,"hello"),(2,"hello"),(3,"hello")]);
+    }
+
+    #[test]
+    fn ordinary_bindings() {
+        let result = monad!(OptionMonad {
+            let a = Some(5u);
+            let x <- a;
+            let b = Some(4u);
+            let y <- b;
+        } in x*y);
+        assert_eq!(result, Some(20));
     }
 }
