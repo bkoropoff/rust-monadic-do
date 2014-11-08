@@ -3,8 +3,15 @@
 
 #[macro_export]
 macro_rules! monad(
+    ($m:ident {
+        let $p:pat = $e:expr;
+        $($rest:tt)*
+    } in $y:expr) => ({
+        let $p = $e;
+        monad!($m { $($rest)* } in $y)
+    });
     ($m:ident { 
-        let $p:pat <- $e:expr;
+        $p:pat <- $e:expr;
         $($rest:tt)*
     } in $y:expr) => (
         $m::mbind($e,|$p| {
@@ -14,22 +21,15 @@ macro_rules! monad(
         })
     );
     ($m:ident {
-        let $p:pat = $e:expr;
-        $($rest:tt)*
-    } in $y:expr) => ({
-        let $p = $e;
-        monad!($m { $($rest)* } in $y)
-    });
-    ($m:ident {
         $e:expr;
         $($rest:tt)*
     } in $y:expr) => (
-        monad!($m { let _ <- $e; $($rest)* } in $y)
+        monad!($m { _ <- $e; $($rest)* } in $y)
     );
     ($m:ident {
         $e:expr
     } in $y:expr) => (
-        monad!($m { let _ <- $e; } in $y)
+        monad!($m { _ <- $e; } in $y)
     );
     ($m:ident { } in $y:expr) => ($m::mpure($y));
 )
@@ -77,8 +77,8 @@ mod test {
     #[test]
     fn option() {
         let result = monad!(OptionMonad {
-            let (a,x) <- Some((2i,6i));
-            let (b,y) <- Some((3i,7i));
+            (a,x) <- Some((2i,6i));
+            (b,y) <- Some((3i,7i));
         } in (a+b,x*y));
         
         assert_eq!(result, Some((2+3,6*7)));
@@ -87,8 +87,8 @@ mod test {
     #[test]
     fn option_fail() {
         let result = monad!(OptionMonad {
-            let (a,x) <- None::<(int,int)>;
-            let (b,y) <- Some((3i,7i));
+            (a,x) <- None::<(int,int)>;
+            (b,y) <- Some((3i,7i));
         } in (a+b,x*y));
         
         assert_eq!(result, None);
@@ -97,8 +97,8 @@ mod test {
     #[test]
     fn result() {
         let result: Result<(int,int),()> = monad!(ResultMonad {
-            let (a,x) <- Ok((2i,6i));
-            let (b,y) <- Ok((3i,7i));
+            (a,x) <- Ok((2i,6i));
+            (b,y) <- Ok((3i,7i));
         } in (a+b,x*y));
         
         assert_eq!(result, Ok((2+3,6*7)));
@@ -107,8 +107,8 @@ mod test {
     #[test]
     fn result_fail() {
         let result: Result<(int,int),()> = monad!(ResultMonad {
-            let (a,x) <- Err::<(int,int),()>(());
-            let (b,y) <- Ok((3i,7i));
+            (a,x) <- Err::<(int,int),()>(());
+            (b,y) <- Ok((3i,7i));
         } in (a+b,x*y));
         
         assert_eq!(result, Err(()));
@@ -117,8 +117,8 @@ mod test {
     #[test]
     fn iter() {
         let mut result = monad!(IterMonad {
-            let a <- vec![1u,2,3].into_iter();
-            let b <- vec!["hello"].into_iter();
+            a <- vec![1u,2,3].into_iter();
+            b <- vec!["hello"].into_iter();
         } in (a,b));
 
         assert_eq!(result.collect::<Vec<(uint,&'static str)>>(),
@@ -129,9 +129,9 @@ mod test {
     fn ordinary_bindings() {
         let result = monad!(OptionMonad {
             let a = Some(5u);
-            let x <- a;
+            x <- a;
             let b = Some(4u);
-            let y <- b;
+            y <- b;
         } in x*y);
         assert_eq!(result, Some(20));
     }
@@ -140,7 +140,7 @@ mod test {
     fn sequence() {
         let result = monad!(OptionMonad {
             Some(());
-            let x <- Some(());
+            x <- Some(());
             None::<()>
         } in x);
         assert_eq!(result, None);
