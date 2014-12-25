@@ -1,8 +1,8 @@
 #![crate_type = "rlib"]
-#![feature(macro_rules,globs)]
+#![feature(macro_rules, globs)]
 
 #[macro_export]
-macro_rules! monad(
+macro_rules! monad {
     ($m:ident {
         let $p:pat = $e:expr;
         $($rest:tt)*
@@ -14,7 +14,7 @@ macro_rules! monad(
         $p:pat <- $e:expr;
         $($rest:tt)*
     } in $y:expr) => (
-        $m::mbind($e,|$p| {
+        $m::mbind($e, move |&mut:$p| {
             monad!($m {
                 $($rest)*
             } in $y)
@@ -32,13 +32,15 @@ macro_rules! monad(
         monad!($m { _ <- $e; } in $y)
     );
     ($m:ident { } in $y:expr) => ($m::mpure($y));
-)
+}
 
+#[allow(missing_copy_implementations)]
 pub struct OptionMonad;
 
 impl OptionMonad {
     pub fn mpure<T>(value: T) -> Option<T> { Some(value) }
-    pub fn mbind<T,U>(value: Option<T>, func: |T| -> Option<U>) -> Option<U> {
+    pub fn mbind<T,U,F>(value: Option<T>, mut func: F) -> Option<U>
+                       where F: FnMut(T) -> Option<U> {
         match value {
             Some(v) => func(v),
             None => None
@@ -46,11 +48,13 @@ impl OptionMonad {
     }
 }
 
+#[allow(missing_copy_implementations)]
 pub struct ResultMonad;
 
 impl ResultMonad {
     pub fn mpure<T,E>(value: T) -> Result<T,E> { Ok(value) }
-    pub fn mbind<T,U,E>(value: Result<T,E>, func: |T| -> Result<U,E>) -> Result<U,E> {
+    pub fn mbind<T,U,E,F>(value: Result<T,E>, mut func: F) -> Result<U,E> 
+                         where F: FnMut(T) -> Result<U,E> {
         match value {
             Ok(v) => func(v),
             Err(e) => Err(e)
@@ -58,15 +62,51 @@ impl ResultMonad {
     }
 }
 
+pub struct IterBind<T,U,I,J,F>
+    where I: Iterator<T>,
+          J: Iterator<U>,
+          F: FnMut(T) -> J {
+    input: I,
+    output: Option<J>,
+    func: F
+}
+
+impl<T,U,I,J,F> Iterator<U> for IterBind<T,U,I,J,F>
+    where I: Iterator<T>,
+          J: Iterator<U>,
+          F: FnMut(T) -> J {
+    fn next(&mut self) -> Option<U> {
+        if let Some(mut o) = self.output.take() {
+            if let Some(v) = o.next() {
+                self.output = Some(o);
+                Some(v)
+            } else {
+                self.output = self.input.next().map(|v| (self.func)(v));
+                self.next()
+            }
+        } else {
+            None
+        }
+    }
+}
+
+#[allow(missing_copy_implementations)]
 pub struct IterMonad;
 
 impl IterMonad {
-    pub fn mpure<T>(value: T) -> std::option::Item<T> {
+    pub fn mpure<T>(value: T) -> std::option::IntoIter<T> {
         Some(value).into_iter()
     }
-    pub fn mbind<T,U,I:Iterator<T>,J:Iterator<U>>(value: I, func: |T| -> J)
-                                                  -> std::vec::MoveItems<U> {
-        value.flat_map(func).collect::<Vec<U>>().into_iter()
+    pub fn mbind<T,U,I,J,F>(mut input: I, mut func: F) -> IterBind<T,U,I,J,F>
+                           where I: Iterator<T>,
+                                 J: Iterator<U>,
+                                 F: FnMut(T) -> J {
+        let output = input.next().map(|v| func(v));
+        IterBind {
+            input: input,
+            output: output,
+            func: func
+        }
     }
 }
 
@@ -116,13 +156,15 @@ mod test {
 
     #[test]
     fn iter() {
-        let mut result = monad!(IterMonad {
-            a <- vec![1u,2,3].into_iter();
-            b <- vec!["hello"].into_iter();
+        let result = monad!(IterMonad {
+            a <- vec![1u, 2, 3].into_iter();
+            b <- vec!["hello", "world"].into_iter();
         } in (a,b));
 
-        assert_eq!(result.collect::<Vec<(uint,&'static str)>>(),
-                   vec![(1u,"hello"),(2,"hello"),(3,"hello")]);
+        assert_eq!(result.collect::<Vec<_>>(),
+                   vec![(1, "hello"), (1, "world"),
+                        (2, "hello"), (2, "world"),
+                        (3, "hello"), (3, "world")]);
     }
 
     #[test]
